@@ -12,7 +12,7 @@ from pynput.keyboard import Key, KeyCode, Controller as KeyboardController, List
 
 
 # Version & Update Configuration
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 GITHUB_API_URL = "https://api.github.com/repos/RealGubby/Update/contents/Macro.py?ref=main"
 UPDATE_URL = "https://raw.githubusercontent.com/RealGubby/Update/refs/heads/main/Macro.py"
 
@@ -1529,11 +1529,6 @@ class MacroLauncherApp:
             with open(current_file, "w", encoding="utf-8") as f:
                 f.write(remote_code)
 
-            messagebox.showinfo(
-                "Update Installed",
-                "Update complete! The application will now restart.",
-                parent=self.root,
-            )
             if self.active_macro is not None:
                 self.active_macro.cleanup()
             self.root.destroy()
