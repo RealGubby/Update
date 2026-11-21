@@ -12,7 +12,8 @@ from pynput.keyboard import Key, KeyCode, Controller as KeyboardController, List
 
 
 # Version & Update Configuration
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.0"
+GITHUB_API_URL = "https://api.github.com/repos/RealGubby/Update/contents/Macro.py?ref=main"
 UPDATE_URL = "https://raw.githubusercontent.com/RealGubby/Update/refs/heads/main/Macro.py"
 
 # Shared Monochrome Palette
@@ -1433,6 +1434,33 @@ class MacroLauncherApp:
         self.update_btn.pack(fill="x")
         bind_hover(self.update_btn, BG_INPUT, BG_HOVER, FG_SECONDARY, FG_PRIMARY)
 
+    def _fetch_remote_code(self) -> str:
+        # 1) Try GitHub Contents API first (bypasses 5-minute raw CDN cache)
+        try:
+            api_req = urllib.request.Request(
+                GITHUB_API_URL,
+                headers={
+                    "User-Agent": "MacroUpdater/1.0",
+                    "Accept": "application/vnd.github.v3.raw",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                },
+            )
+            with urllib.request.urlopen(api_req, timeout=6) as response:
+                return response.read().decode("utf-8")
+        except Exception:
+            # 2) Fallback to raw.githubusercontent.com
+            raw_req = urllib.request.Request(
+                f"{UPDATE_URL}?t={int(time.time())}",
+                headers={
+                    "User-Agent": "MacroUpdater/1.0",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                },
+            )
+            with urllib.request.urlopen(raw_req, timeout=6) as response:
+                return response.read().decode("utf-8")
+
     def check_for_updates(self, manual: bool = False):
         if self.is_checking_update:
             return
@@ -1443,19 +1471,14 @@ class MacroLauncherApp:
 
         def worker():
             try:
-                # Cache-busting timestamp parameter for GitHub raw CDN
-                url = f"{UPDATE_URL}?t={int(time.time())}"
-                req = urllib.request.Request(url, headers={"User-Agent": "MacroUpdater/1.0"})
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    remote_code = response.read().decode("utf-8")
-
+                remote_code = self._fetch_remote_code()
                 match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', remote_code)
                 remote_version = match.group(1) if match else None
 
                 if remote_version and parse_version(remote_version) > parse_version(APP_VERSION):
                     self.root.after(0, lambda: self._prompt_update(remote_version, remote_code))
                 else:
-                    self.root.after(0, lambda: self._on_up_to_date(manual))
+                    self.root.after(0, lambda: self._on_up_to_date(manual, remote_version))
             except Exception as exc:
                 self.root.after(0, lambda e=exc: self._on_update_error(manual, str(e)))
             finally:
@@ -1463,11 +1486,12 @@ class MacroLauncherApp:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_up_to_date(self, manual: bool):
+    def _on_up_to_date(self, manual: bool, remote_version: str = None):
         if not self.update_btn.winfo_exists():
             return
         if manual:
-            self.update_btn.config(text=f"✓  UP TO DATE (v{APP_VERSION})", fg=FG_PRIMARY)
+            ver_info = f"v{remote_version}" if remote_version else f"v{APP_VERSION}"
+            self.update_btn.config(text=f"✓  UP TO DATE ({ver_info})", fg=FG_PRIMARY)
             self.root.after(2500, self._reset_update_btn)
         else:
             self._reset_update_btn()
