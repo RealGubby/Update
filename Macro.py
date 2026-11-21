@@ -12,7 +12,7 @@ from pynput.keyboard import Key, KeyCode, Controller as KeyboardController, List
 
 
 # Version & Update Configuration
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.1"
 GITHUB_API_URL = "https://api.github.com/repos/RealGubby/Update/contents/Macro.py?ref=main"
 UPDATE_URL = "https://raw.githubusercontent.com/RealGubby/Update/refs/heads/main/Macro.py"
 
@@ -1295,7 +1295,7 @@ class MacroLauncherApp:
         self.root.configure(bg=BORDER_SUBTLE)
         self.root.attributes("-topmost", True)
         self.root.overrideredirect(True)
-        center_window(self.root, 340, 248)
+        center_window(self.root, 340, 214)
 
         self.active_macro = None
         self.is_checking_update = False
@@ -1375,7 +1375,7 @@ class MacroLauncherApp:
 
         # Selection Buttons Body
         body = tk.Frame(container, bg=BG_MAIN)
-        body.pack(fill="both", expand=True, padx=18, pady=16)
+        body.pack(fill="both", expand=True, padx=18, pady=14)
 
         auto_sell_btn = tk.Button(
             body,
@@ -1558,7 +1558,7 @@ class MacroLauncherApp:
 
     def show_launcher(self):
         self.active_macro = None
-        center_window(self.root, 340, 248)
+        center_window(self.root, 340, 214)
         self.root.deiconify()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
