@@ -1,11 +1,19 @@
+import os
+import re
+import sys
 import threading
 import time
 import tkinter as tk
 from tkinter import messagebox
-from pynput import mouse, keyboard
+import urllib.request
+from pynput import mouse
 from pynput.mouse import Button, Controller as MouseController
 from pynput.keyboard import Key, KeyCode, Controller as KeyboardController, Listener as KeyboardListener
 
+
+# Version & Update Configuration
+APP_VERSION = "1.0.0"
+UPDATE_URL = "https://raw.githubusercontent.com/RealGubby/Update/refs/heads/main/Macro.py"
 
 # Shared Monochrome Palette
 BG_MAIN = "#080808"
@@ -16,6 +24,13 @@ BORDER_SUBTLE = "#262626"
 FG_PRIMARY = "#FFFFFF"
 FG_SECONDARY = "#9A9A9A"
 FG_MUTED = "#555555"
+
+
+def parse_version(version_str: str) -> tuple:
+    try:
+        return tuple(int(x) for x in version_str.strip().split("."))
+    except ValueError:
+        return (0, 0, 0)
 
 
 def center_window(win: tk.Tk | tk.Toplevel, width: int, height: int):
@@ -360,27 +375,23 @@ class AutoSellMacroWindow:
 
     def macro_loop(self):
         while self.is_running:
-            # Step 1: Press 't'
             self.keyboard_controller.press('t')
             self.keyboard_controller.release('t')
             self.sleep_interruptible(self.step_interval)
             if not self.is_running:
                 break
 
-            # Step 2: Type "/ah sell {amount}k"
             self.keyboard_controller.type(self.get_command_text())
             self.sleep_interruptible(self.step_interval)
             if not self.is_running:
                 break
 
-            # Step 3: Press 'Enter'
             self.keyboard_controller.press(Key.enter)
             self.keyboard_controller.release(Key.enter)
             self.sleep_interruptible(self.step_interval)
             if not self.is_running:
                 break
 
-            # Step 4: Move mouse to saved position and Left Click
             self.mouse_controller.position = (self.target_x, self.target_y)
             self.mouse_controller.click(Button.left, 1)
             self.sleep_interruptible(self.step_interval)
@@ -696,7 +707,7 @@ class AutoKillMacroWindow:
         self.win.overrideredirect(True)
         center_window(self.win, 340, 286)
 
-        # Default Settings (From Macro_2.py)[cite: 4]
+        # Default Settings
         self.left_interval = 1.0
         self.clicks_before_right = 30
         self.right_hold_duration = 3.0
@@ -1283,10 +1294,14 @@ class MacroLauncherApp:
         self.root.configure(bg=BORDER_SUBTLE)
         self.root.attributes("-topmost", True)
         self.root.overrideredirect(True)
-        center_window(self.root, 340, 200)
+        center_window(self.root, 340, 248)
 
         self.active_macro = None
+        self.is_checking_update = False
         self._build_launcher_ui()
+
+        # Automatically scan for updates on startup
+        self.check_for_updates(manual=False)
 
     def _minimize_window(self):
         self.root.overrideredirect(False)
@@ -1315,7 +1330,7 @@ class MacroLauncherApp:
 
         title_lbl = tk.Label(
             title_bar,
-            text="  ◆  SELECT MACRO",
+            text=f"  ◆  SELECT MACRO  v{APP_VERSION}",
             font=("Segoe UI", 9, "bold"),
             bg=BG_CARD,
             fg=FG_PRIMARY,
@@ -1359,7 +1374,7 @@ class MacroLauncherApp:
 
         # Selection Buttons Body
         body = tk.Frame(container, bg=BG_MAIN)
-        body.pack(fill="both", expand=True, padx=18, pady=18)
+        body.pack(fill="both", expand=True, padx=18, pady=16)
 
         auto_sell_btn = tk.Button(
             body,
@@ -1377,7 +1392,7 @@ class MacroLauncherApp:
             cursor="hand2",
             command=self.open_auto_sell,
         )
-        auto_sell_btn.pack(fill="x", pady=(0, 10))
+        auto_sell_btn.pack(fill="x", pady=(0, 8))
         bind_hover(auto_sell_btn, BG_CARD, BG_HOVER)
 
         auto_kill_btn = tk.Button(
@@ -1396,11 +1411,119 @@ class MacroLauncherApp:
             cursor="hand2",
             command=self.open_auto_kill,
         )
-        auto_kill_btn.pack(fill="x")
+        auto_kill_btn.pack(fill="x", pady=(0, 8))
         bind_hover(auto_kill_btn, BG_CARD, BG_HOVER)
 
+        self.update_btn = tk.Button(
+            body,
+            text="↻  SEARCH FOR UPDATES",
+            font=("Consolas", 9, "bold"),
+            height=2,
+            bg=BG_INPUT,
+            fg=FG_SECONDARY,
+            activebackground="#FFFFFF",
+            activeforeground="#000000",
+            highlightbackground=BORDER_SUBTLE,
+            highlightthickness=1,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            command=lambda: self.check_for_updates(manual=True),
+        )
+        self.update_btn.pack(fill="x")
+        bind_hover(self.update_btn, BG_INPUT, BG_HOVER, FG_SECONDARY, FG_PRIMARY)
+
+    def check_for_updates(self, manual: bool = False):
+        if self.is_checking_update:
+            return
+        self.is_checking_update = True
+
+        if manual and self.update_btn.winfo_exists():
+            self.update_btn.config(text="↻  CHECKING FOR UPDATES...", fg=FG_PRIMARY)
+
+        def worker():
+            try:
+                # Cache-busting timestamp parameter for GitHub raw CDN
+                url = f"{UPDATE_URL}?t={int(time.time())}"
+                req = urllib.request.Request(url, headers={"User-Agent": "MacroUpdater/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    remote_code = response.read().decode("utf-8")
+
+                match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', remote_code)
+                remote_version = match.group(1) if match else None
+
+                if remote_version and parse_version(remote_version) > parse_version(APP_VERSION):
+                    self.root.after(0, lambda: self._prompt_update(remote_version, remote_code))
+                else:
+                    self.root.after(0, lambda: self._on_up_to_date(manual))
+            except Exception as exc:
+                self.root.after(0, lambda e=exc: self._on_update_error(manual, str(e)))
+            finally:
+                self.is_checking_update = False
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_up_to_date(self, manual: bool):
+        if not self.update_btn.winfo_exists():
+            return
+        if manual:
+            self.update_btn.config(text=f"✓  UP TO DATE (v{APP_VERSION})", fg=FG_PRIMARY)
+            self.root.after(2500, self._reset_update_btn)
+        else:
+            self._reset_update_btn()
+
+    def _on_update_error(self, manual: bool, err: str):
+        if not self.update_btn.winfo_exists():
+            return
+        if manual:
+            self.update_btn.config(text="✕  UPDATE CHECK FAILED", fg=FG_SECONDARY)
+            messagebox.showerror(
+                "Update Error",
+                f"Could not reach GitHub update server.\n\nDetails: {err}",
+                parent=self.root,
+            )
+            self._reset_update_btn()
+
+    def _reset_update_btn(self):
+        if self.update_btn.winfo_exists():
+            self.update_btn.config(text="↻  SEARCH FOR UPDATES", fg=FG_SECONDARY)
+
+    def _prompt_update(self, remote_version: str, remote_code: str):
+        self._reset_update_btn()
+        answer = messagebox.askyesno(
+            "Update Available",
+            f"A new version (v{remote_version}) is available!\n"
+            f"Current version: v{APP_VERSION}\n\n"
+            "Do you want to download and install it now?",
+            parent=self.root,
+        )
+        if answer:
+            self._apply_update(remote_code)
+
+    def _apply_update(self, remote_code: str):
+        try:
+            current_file = os.path.abspath(__file__)
+            with open(current_file, "w", encoding="utf-8") as f:
+                f.write(remote_code)
+
+            messagebox.showinfo(
+                "Update Installed",
+                "Update complete! The application will now restart.",
+                parent=self.root,
+            )
+            if self.active_macro is not None:
+                self.active_macro.cleanup()
+            self.root.destroy()
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception as exc:
+            messagebox.showerror(
+                "Installation Failed",
+                f"Failed to overwrite script file:\n{exc}",
+                parent=self.root,
+            )
+
     def open_auto_sell(self):
-        self.root.withdraw()  # Hide selector UI
+        self.root.withdraw()
         self.active_macro = AutoSellMacroWindow(
             self.root,
             on_back_callback=self.show_launcher,
@@ -1408,7 +1531,7 @@ class MacroLauncherApp:
         )
 
     def open_auto_kill(self):
-        self.root.withdraw()  # Hide selector UI
+        self.root.withdraw()
         self.active_macro = AutoKillMacroWindow(
             self.root,
             on_back_callback=self.show_launcher,
@@ -1417,7 +1540,7 @@ class MacroLauncherApp:
 
     def show_launcher(self):
         self.active_macro = None
-        center_window(self.root, 340, 200)
+        center_window(self.root, 340, 248)
         self.root.deiconify()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
