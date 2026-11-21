@@ -12,7 +12,7 @@ from pynput.keyboard import Key, KeyCode, Controller as KeyboardController, List
 
 
 # Version & Update Configuration
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 UPDATE_URL = "https://raw.githubusercontent.com/RealGubby/Update/refs/heads/main/Macro.py"
 
 # Shared Monochrome Palette
